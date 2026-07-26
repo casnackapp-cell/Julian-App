@@ -13,11 +13,11 @@ export function Splash() {
         style={{ minHeight: '100dvh', justifyContent: 'center', alignItems: 'center' }}
       >
         <img
-          src="/icon.svg"
+          src="/icon-512.png"
           alt="Cargando"
           width={72}
           height={72}
-          style={{ borderRadius: 18, animation: 'spin 2.6s linear infinite' }}
+          style={{ animation: 'spin 2.6s linear infinite' }}
         />
       </div>
     </div>

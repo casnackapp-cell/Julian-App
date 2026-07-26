@@ -15,15 +15,12 @@ import '@fontsource-variable/jetbrains-mono'
 import './styles/global.css'
 import './styles/ui.css'
 
-// El service worker solo en producción: en desarrollo se queda sirviendo
-// versiones cacheadas y uno cree que el código no se está actualizando.
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('No se pudo registrar el service worker:', err)
-    })
-  })
-}
+import { registerServiceWorker } from './lib/pwa'
+
+// Registra el service worker y deja la app actualizándose sola: cuando se
+// publica una versión nueva, la siguiente vez que Julián la abre ya está puesta,
+// sin desinstalar ni reinstalar nada.
+registerServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

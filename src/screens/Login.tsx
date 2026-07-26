@@ -27,11 +27,14 @@ export function Login() {
           className="center"
         >
           <img
-            src="/icon.svg"
+            src="/icon-512.png"
             alt=""
-            width={86}
-            height={86}
-            style={{ borderRadius: 20, boxShadow: 'var(--shadow-lg)' }}
+            width={92}
+            height={92}
+            /* drop-shadow y no box-shadow: el PNG ya trae las esquinas
+               redondeadas y transparentes, así que box-shadow dibujaría una
+               sombra cuadrada por detrás. drop-shadow sigue el canal alfa. */
+            style={{ filter: 'drop-shadow(0 14px 26px rgba(74, 48, 26, 0.34))' }}
           />
           <h1 style={{ fontSize: 27, fontWeight: 700, letterSpacing: '-0.03em', marginTop: 18 }}>
             {brand.name}

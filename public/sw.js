@@ -1,21 +1,39 @@
 /**
  * Service worker de Julian App.
  *
- * Estrategia deliberadamente conservadora:
+ * ACTUALIZACIÓN AUTOMÁTICA — cómo funciona, porque es la parte delicada:
  *
- *  - Navegación (abrir la app): red primero, caché de respaldo. Así Julián
- *    siempre recibe la última versión si tiene señal, y sigue entrando si no.
- *  - Recursos estáticos (JS, CSS, iconos, fuentes): caché primero. Ya vienen con
- *    un hash en el nombre, así que si el contenido cambia, cambia la URL.
+ *  1. `VERSION` se sella en cada compilación (ver el plugin de vite.config.ts).
+ *     Si el contenido de la app cambió, este archivo cambia → el navegador
+ *     detecta un service worker distinto byte a byte y lo instala.
+ *  2. `skipWaiting()` hace que el nuevo tome el control sin esperar a que se
+ *     cierren todas las pestañas. Sin esto, el service worker nuevo se queda
+ *     "esperando" para siempre y la app se queda vieja hasta reinstalarla —
+ *     que es justo el problema que se quería resolver.
+ *  3. `clients.claim()` le pasa el control de las páginas ya abiertas.
+ *  4. Eso dispara `controllerchange` en la página, y `src/lib/pwa.ts` recarga.
  *
- * No se cachea nada de Firestore: los datos los maneja la propia app.
+ * Estrategia de caché:
+ *  - Navegación: red primero, caché de respaldo. Con señal siempre se recibe la
+ *    última versión; sin señal, la app abre igual.
+ *  - Recursos (JS, CSS, fuentes, iconos): caché primero. Vite les pone un hash
+ *    en el nombre, así que si el contenido cambia, cambia la URL.
+ *
+ * Nada de Firestore se cachea aquí: de los datos se encarga la propia app.
  */
 
-const VERSION = 'v1'
+const VERSION = '__BUILD_ID__'
 const SHELL = `julian-shell-${VERSION}`
 const ASSETS = `julian-assets-${VERSION}`
 
-const PRECACHE = ['/', '/index.html', '/manifest.json', '/icon.svg', '/icon-192.png', '/icon-512.png']
+const PRECACHE = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/favicon.png',
+]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -32,10 +50,16 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) =>
+        // Fuera las cachés de versiones anteriores, o crecerían sin límite.
         Promise.all(keys.filter((k) => k !== SHELL && k !== ASSETS).map((k) => caches.delete(k))),
       )
       .then(() => self.clients.claim()),
   )
+})
+
+// Permite forzar la actualización desde la página sin esperar nada.
+self.addEventListener('message', (event) => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting()
 })
 
 self.addEventListener('fetch', (event) => {
@@ -44,10 +68,13 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url)
 
-  // Firebase y cualquier API: siempre a la red, nunca cacheado.
-  if (url.hostname.includes('firebase') || url.hostname.includes('googleapis.com')) {
-    if (url.hostname !== 'fonts.googleapis.com' && url.hostname !== 'fonts.gstatic.com') return
-  }
+  // Firebase y las APIs de Google: siempre a la red. Cachear respuestas de
+  // autenticación o de Firestore daría datos viejos o sesiones fantasma.
+  const isGoogleApi =
+    url.hostname.includes('firebase') ||
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('google.com')
+  if (isGoogleApi) return
 
   // Navegación: red primero.
   if (request.mode === 'navigate') {
@@ -69,9 +96,7 @@ self.addEventListener('fetch', (event) => {
       if (cached) return cached
 
       return fetch(request).then((response) => {
-        // Las respuestas opacas (CDN de fuentes) no se pueden inspeccionar;
-        // se guardan igual porque son las fuentes y no cambian.
-        if (response.ok || response.type === 'opaque') {
+        if (response.ok) {
           const copy = response.clone()
           caches.open(ASSETS).then((cache) => cache.put(request, copy))
         }
