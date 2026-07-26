@@ -10,10 +10,17 @@ hagas clic, porque piden abrir un navegador y elegir cuenta.
 En tu terminal:
 
 ```bash
-firebase login:add
+firebase login:add casnack.app@gmail.com --no-localhost
 ```
 
-Se abre el navegador. **Elige `casnack.app@gmail.com`** y acepta los permisos.
+Imprime un enlace largo. **Ábrelo en una ventana de incógnito** (`Ctrl+Shift+N`),
+entra con `casnack.app@gmail.com`, acepta los permisos y copia el código que te
+da Google. Pégalo de vuelta en la terminal.
+
+> **Por qué incógnito.** Si dejas que el comando abra tu navegador normal, Google
+> entra solo con la sesión principal (sinfiniity) y acabas autorizando la cuenta
+> equivocada. La ventana de incógnito no arrastra ninguna sesión, así que te
+> obliga a escribir cuál quieres.
 
 Tu cuenta `jostivtrb@gmail.com` sigue ahí; esto solo añade una segunda. Puedes
 verlas con `firebase login:list`.
