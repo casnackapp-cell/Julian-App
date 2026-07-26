@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// Toda la app cuelga de users/{uid}, así que la seguridad se reduce a una idea:
+// cada quien entra solo a lo suyo, y nada más existe.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Cuentas, categorías, movimientos, pagos, notas y metas.
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Cualquier otra ruta queda cerrada. Sin esto, un descuido al añadir una
+    // colección nueva la dejaría abierta al mundo.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

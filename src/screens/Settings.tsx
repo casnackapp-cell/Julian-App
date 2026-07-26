@@ -6,7 +6,9 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ChevronRight,
+  CloudCheck,
   Eye,
+  LogOut,
   Monitor,
   Moon,
   NotebookPen,
@@ -18,6 +20,7 @@ import {
 
 import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../store/store'
+import { useAuth } from '../firebase/AuthProvider'
 import { brand } from '../config/brand'
 import type { ThemePref } from '../data/types'
 
@@ -35,6 +38,7 @@ const SECTIONS = [
 
 export function Settings() {
   const { profile, updateProfile, setTheme, toggleHideBalance, resetAll } = useApp()
+  const { user, signOutUser } = useAuth()
   const [confirmReset, setConfirmReset] = useState(false)
 
   return (
@@ -110,6 +114,25 @@ export function Settings() {
           </Link>
         ))}
       </div>
+
+      {/* Sesión. Solo aparece si la app está conectada a la nube. */}
+      {user && (
+        <section className="card card--tight">
+          <div className="hstack">
+            <span className="row__icon">
+              <CloudCheck size={18} color="var(--income)" />
+            </span>
+            <span className="row__main">
+              <span className="row__title">Guardado en la nube</span>
+              <span className="row__sub">{user.email}</span>
+            </span>
+            <button className="btn btn--sm btn--ghost" onClick={signOutUser}>
+              <LogOut size={15} />
+              Salir
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* Zona peligrosa */}
       <div className="section-head">
