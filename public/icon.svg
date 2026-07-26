@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Julian App">
+  <rect width="512" height="512" rx="112" fill="#9e1b32"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#f7f0e4" stroke-width="3" opacity=".22"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#f7f0e4" stroke-width="3" opacity=".16"/>
+  <circle cx="256" cy="256" r="124" fill="none" stroke="#b08334" stroke-width="4" opacity=".55"/>
+  <rect x="176" y="272" width="26" height="64" rx="8" fill="#f7f0e4"/>
+  <rect x="216" y="224" width="26" height="112" rx="8" fill="#f7f0e4"/>
+  <rect x="256" y="176" width="26" height="160" rx="8" fill="#f7f0e4"/>
+  <rect x="296" y="240" width="26" height="96" rx="8" fill="#b08334"/>
+  <circle cx="256" cy="256" r="13" fill="#9e1b32"/>
+  <circle cx="256" cy="256" r="13" fill="none" stroke="#f7f0e4" stroke-width="4"/>
+</svg>
