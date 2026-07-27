@@ -565,13 +565,9 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgba(38, 24, 16, 0.36);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-}
-
-[data-theme='dark'] .sheet-overlay {
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .sheet {
@@ -580,12 +576,15 @@
   max-height: 92dvh;
   display: flex;
   flex-direction: column;
-  background: var(--surface-strong);
+  /* Casi opaca a propósito: aquí se escriben montos y hay que poder leerlos sin
+     que se cruce el contenido de la pantalla de atrás. El cristal se queda para
+     las tarjetas, que sí van sobre el fondo. */
+  background: var(--surface-sheet);
   border: 1px solid var(--border);
   border-bottom: none;
   border-radius: var(--r-xl) var(--r-xl) 0 0;
-  backdrop-filter: blur(26px) saturate(1.3);
-  -webkit-backdrop-filter: blur(26px) saturate(1.3);
+  backdrop-filter: blur(30px) saturate(1.2);
+  -webkit-backdrop-filter: blur(30px) saturate(1.2);
   box-shadow: var(--shadow-lg);
   padding-bottom: calc(var(--safe-bottom) + 16px);
 }

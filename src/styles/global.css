@@ -27,6 +27,12 @@
   --border-soft: rgba(120, 92, 60, 0.16);
   --blur: 18px;
 
+  /* Las hojas van casi opacas. El cristal está bien en una tarjeta sobre el
+     fondo, pero en un formulario a pantalla completa dejar ver los saldos de
+     atrás estorba para leer y para escribir. */
+  --surface-sheet: rgba(253, 249, 242, 0.985);
+  --scrim: rgba(46, 30, 18, 0.5);
+
   /* — Texto — */
   --text: #2b2320;
   --text-soft: #6f6055;
@@ -102,6 +108,9 @@
   --border: rgba(255, 219, 178, 0.14);
   --border-soft: rgba(255, 200, 150, 0.1);
   --blur: 20px;
+
+  --surface-sheet: rgba(37, 29, 24, 0.985);
+  --scrim: rgba(0, 0, 0, 0.62);
 
   --text: #f4e9da;
   --text-soft: #bba792;
