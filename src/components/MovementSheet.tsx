@@ -10,21 +10,24 @@
  * Julián sepa que existe el concepto de "movimiento de ajuste".
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowRightLeft,
+  Check,
   ChevronRight,
   Plus,
   Scale,
   Trash2,
   TrendingDown,
   TrendingUp,
+  X,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 import { Sheet } from './ui/Sheet'
 import { Money } from './Money'
 import { useApp } from '../store/store'
+import { palette } from '../config/brand'
 import { formatAmountInput, parseAmount } from '../lib/money'
 import { fromDateInput, toDateTimeInput } from '../lib/date'
 import { allBalances, frequentCategories, visibleAccounts } from '../data/selectors'
@@ -93,7 +96,16 @@ export function MovementSheet({
   presetAmount,
   presetNote,
 }: MovementSheetProps) {
-  const { accounts, categories, movements, addMovement, updateMovement, deleteMovement } = useApp()
+  const {
+    accounts,
+    categories,
+    movements,
+    addAccount,
+    addCategory,
+    addMovement,
+    updateMovement,
+    deleteMovement,
+  } = useApp()
   const navigate = useNavigate()
 
   const [type, setType] = useState<MovementType | null>(null)
@@ -105,12 +117,32 @@ export function MovementSheet({
   const [when, setWhen] = useState<number>(() => Date.now())
   const [error, setError] = useState('')
 
+  /** Qué se está creando al vuelo, sin salir de esta hoja. */
+  const [creating, setCreating] = useState<'account' | 'toAccount' | 'category' | null>(null)
+  const [draft, setDraft] = useState('')
+
+  /** `true` mientras la hoja lleva abierta esta sesión: evita rearmar el formulario. */
+  const armed = useRef(false)
+
   const openAccounts = useMemo(() => visibleAccounts(accounts), [accounts])
   const balances = useMemo(() => allBalances(movements), [movements])
 
-  /* Cada vez que se abre, el formulario se rearma desde cero. */
+  /**
+   * El formulario se rearma SOLO al abrir la hoja, no cada vez que cambian las
+   * cuentas o las categorías.
+   *
+   * Sin este control, crear una cuenta al vuelo desde aquí cambiaba la lista de
+   * cuentas, el efecto se volvía a disparar y borraba todo lo que se llevaba
+   * escrito, devolviendo al paso de "¿qué vas a registrar?".
+   */
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      armed.current = false
+      return
+    }
+    if (armed.current) return
+    armed.current = true
+
     setError('')
 
     if (editing) {
@@ -146,6 +178,43 @@ export function MovementSheet({
   )
 
   const currentBalance = accountId ? (balances[accountId] ?? 0) : 0
+
+  /* ---------------------------------------------------------------------------
+     Crear cuenta o categoría sin salir del registro.
+     Se crean con lo mínimo (nombre + un color al azar) porque el objetivo aquí
+     es no interrumpir: el emoji, el color y el saldo se ajustan después desde
+     Cuentas o Categorías, si es que hace falta.
+     --------------------------------------------------------------------------- */
+
+  function startCreate(what: 'account' | 'toAccount' | 'category') {
+    setCreating(what)
+    setDraft('')
+    setError('')
+  }
+
+  function cancelCreate() {
+    setCreating(null)
+    setDraft('')
+  }
+
+  function confirmCreate() {
+    const name = draft.trim()
+    if (!name) return
+
+    const color = palette[Math.floor(Math.random() * palette.length)]
+
+    if (creating === 'category') {
+      if (!catKind) return
+      const created = addCategory({ name, emoji: '📌', color, kind: catKind })
+      setCategoryId(created.id)
+    } else {
+      const created = addAccount({ name, emoji: '💵', color })
+      if (creating === 'toAccount') setToAccountId(created.id)
+      else setAccountId(created.id)
+    }
+
+    cancelCreate()
+  }
 
   /** Para el ajuste: el monto tecleado es el saldo real, no la diferencia. */
   const adjustDelta = amount - currentBalance
@@ -330,46 +399,50 @@ export function MovementSheet({
         </div>
       )}
 
-      {/* Cuenta */}
+      {/* Cuenta. Fichas y no un desplegable: el menú nativo se abre donde quiere
+          y además así se crea una cuenta nueva sin salir de aquí. */}
       <div className="field">
         <span className="field__label">{type === 'transfer' ? 'Sale de' : 'Cuenta'}</span>
-        <select
-          className="select"
-          value={accountId}
-          onChange={(e) => {
-            setAccountId(e.target.value)
+        <PickerRow
+          options={openAccounts.map((a) => ({ id: a.id, emoji: a.emoji, name: a.name }))}
+          selected={accountId}
+          onSelect={(id) => {
+            setAccountId(id)
             setError('')
           }}
-        >
-          {openAccounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.emoji} {a.name}
-            </option>
-          ))}
-        </select>
+          creating={creating === 'account'}
+          onStartCreate={() => startCreate('account')}
+          onCancelCreate={cancelCreate}
+          onConfirmCreate={confirmCreate}
+          draft={draft}
+          onDraft={setDraft}
+          newLabel="Nueva cuenta"
+          placeholder="Efectivo, Nequi, Bancolombia…"
+        />
       </div>
 
       {/* Cuenta destino */}
       {type === 'transfer' && (
         <div className="field">
           <span className="field__label">Entra a</span>
-          <select
-            className="select"
-            value={toAccountId}
-            onChange={(e) => {
-              setToAccountId(e.target.value)
+          <PickerRow
+            options={openAccounts
+              .filter((a) => a.id !== accountId)
+              .map((a) => ({ id: a.id, emoji: a.emoji, name: a.name }))}
+            selected={toAccountId}
+            onSelect={(id) => {
+              setToAccountId(id)
               setError('')
             }}
-          >
-            <option value="">Elige una cuenta…</option>
-            {openAccounts
-              .filter((a) => a.id !== accountId)
-              .map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.emoji} {a.name}
-                </option>
-              ))}
-          </select>
+            creating={creating === 'toAccount'}
+            onStartCreate={() => startCreate('toAccount')}
+            onCancelCreate={cancelCreate}
+            onConfirmCreate={confirmCreate}
+            draft={draft}
+            onDraft={setDraft}
+            newLabel="Nueva cuenta"
+            placeholder="Nombre de la cuenta"
+          />
         </div>
       )}
 
@@ -377,35 +450,22 @@ export function MovementSheet({
       {catKind && (
         <div className="field">
           <span className="field__label">Categoría</span>
-          {availableCategories.length === 0 ? (
-            <button
-              className="btn btn--ghost btn--block"
-              onClick={() => {
-                onClose()
-                navigate('/categorias')
-              }}
-            >
-              <Plus size={16} />
-              No tienes categorías de {catKind === 'income' ? 'ingreso' : 'gasto'}. Crear una
-            </button>
-          ) : (
-            <div className="chip-row" style={{ flexWrap: 'wrap', overflowX: 'visible' }}>
-              {availableCategories.map((c) => (
-                <button
-                  key={c.id}
-                  className={`chip${categoryId === c.id ? ' chip--active' : ''}`}
-                  onClick={() => {
-                    setCategoryId(c.id)
-                    setError('')
-                  }}
-                  aria-pressed={categoryId === c.id}
-                >
-                  <span aria-hidden="true">{c.emoji}</span>
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          )}
+          <PickerRow
+            options={availableCategories.map((c) => ({ id: c.id, emoji: c.emoji, name: c.name }))}
+            selected={categoryId}
+            onSelect={(id) => {
+              setCategoryId(id)
+              setError('')
+            }}
+            creating={creating === 'category'}
+            onStartCreate={() => startCreate('category')}
+            onCancelCreate={cancelCreate}
+            onConfirmCreate={confirmCreate}
+            draft={draft}
+            onDraft={setDraft}
+            newLabel={`Nueva categoría de ${catKind === 'income' ? 'ingreso' : 'gasto'}`}
+            placeholder={catKind === 'income' ? 'Sueldo, Extras…' : 'Mercado, Gasolina…'}
+          />
         </div>
       )}
 
@@ -438,5 +498,103 @@ export function MovementSheet({
         </p>
       )}
     </Sheet>
+  )
+}
+
+/**
+ * Fila de fichas para elegir cuenta o categoría, con una ficha final para crear
+ * una nueva sin salir del registro.
+ *
+ * Es lo que hace que registrar un gasto en un sitio nuevo no obligue a
+ * abandonar lo que se estaba escribiendo, ir a otra pantalla, crear la cuenta y
+ * volver a empezar.
+ */
+function PickerRow({
+  options,
+  selected,
+  onSelect,
+  creating,
+  onStartCreate,
+  onCancelCreate,
+  onConfirmCreate,
+  draft,
+  onDraft,
+  newLabel,
+  placeholder,
+}: {
+  options: Array<{ id: string; emoji: string; name: string }>
+  selected: string
+  onSelect: (id: string) => void
+  creating: boolean
+  onStartCreate: () => void
+  onCancelCreate: () => void
+  onConfirmCreate: () => void
+  draft: string
+  onDraft: (v: string) => void
+  newLabel: string
+  placeholder: string
+}) {
+  if (creating) {
+    return (
+      <div className="hstack">
+        <input
+          className="input"
+          value={draft}
+          onChange={(e) => onDraft(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter confirma y Escape cancela: se crea sin levantar el pulgar
+            // del teclado, que es de lo que se trata.
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              onConfirmCreate()
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              onCancelCreate()
+            }
+          }}
+          placeholder={placeholder}
+          maxLength={40}
+          autoFocus
+        />
+        <button
+          className="icon-btn icon-btn--solid"
+          onClick={onConfirmCreate}
+          disabled={!draft.trim()}
+          aria-label="Crear"
+          style={!draft.trim() ? { opacity: 0.4, pointerEvents: 'none' } : undefined}
+        >
+          <Check size={17} />
+        </button>
+        <button className="icon-btn" onClick={onCancelCreate} aria-label="Cancelar">
+          <X size={17} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="chip-row" style={{ flexWrap: 'wrap', overflowX: 'visible' }}>
+      {options.map((o) => (
+        <button
+          key={o.id}
+          className={`chip${selected === o.id ? ' chip--active' : ''}`}
+          onClick={() => onSelect(o.id)}
+          aria-pressed={selected === o.id}
+        >
+          <span aria-hidden="true">{o.emoji}</span>
+          {o.name}
+        </button>
+      ))}
+
+      <button
+        className="chip"
+        onClick={onStartCreate}
+        style={{ borderStyle: 'dashed', color: 'var(--primary)' }}
+      >
+        <Plus size={14} />
+        {options.length === 0 ? newLabel : 'Nueva'}
+      </button>
+    </div>
   )
 }
