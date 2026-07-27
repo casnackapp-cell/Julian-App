@@ -84,15 +84,19 @@ export interface Movement {
   createdAt: number
 }
 
-/** Recordatorio de pago. Nada se registra solo: Julián confirma cada uno (decisión D6). */
+/**
+ * Recordatorio de pago.
+ *
+ * Es SOLO un aviso: no lleva cuenta ni categoría y nunca genera un movimiento.
+ * El gasto lo registra Julián a mano desde "Ir a pagar", que abre el formulario
+ * con el concepto y el monto ya escritos.
+ */
 export interface Reminder {
   id: ID
   name: string
   emoji: string
   /** Centavos. Opcional: puede ser un recordatorio sin monto fijo. */
   amount?: number
-  accountId?: ID
-  categoryId?: ID
   /** Si se repite o es de una sola vez. */
   periodic: boolean
   freq?: ReminderFreq
@@ -187,8 +191,6 @@ export interface NewReminderInput {
   name: string
   emoji: string
   amount?: number
-  accountId?: ID
-  categoryId?: ID
   periodic: boolean
   freq?: ReminderFreq
   nextDate: number

@@ -80,6 +80,8 @@ interface MovementSheetProps {
   editing: Movement | null
   presetType?: MovementType
   presetAccountId?: ID
+  presetAmount?: number
+  presetNote?: string
 }
 
 export function MovementSheet({
@@ -88,6 +90,8 @@ export function MovementSheet({
   editing,
   presetType,
   presetAccountId,
+  presetAmount,
+  presetNote,
 }: MovementSheetProps) {
   const { accounts, categories, movements, addMovement, updateMovement, deleteMovement } = useApp()
   const navigate = useNavigate()
@@ -122,13 +126,14 @@ export function MovementSheet({
     }
 
     setType(presetType ?? null)
-    setRaw('')
+    // Al venir de un recordatorio de pago, el monto y el concepto llegan puestos.
+    setRaw(presetAmount ? formatAmountInput(String(presetAmount / 100).replace('.', ',')) : '')
     setAccountId(presetAccountId ?? openAccounts[0]?.id ?? '')
     setToAccountId('')
     setCategoryId('')
-    setNote('')
+    setNote(presetNote ?? '')
     setWhen(Date.now())
-  }, [open, editing, presetType, presetAccountId, openAccounts])
+  }, [open, editing, presetType, presetAccountId, presetAmount, presetNote, openAccounts])
 
   const amount = parseAmount(raw)
 

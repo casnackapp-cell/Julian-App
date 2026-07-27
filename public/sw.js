@@ -1,30 +1,28 @@
 /**
  * Service worker de Julian App.
  *
- * ACTUALIZACIÓN AUTOMÁTICA — cómo funciona, porque es la parte delicada:
+ * ACTUALIZACIÓN AUTOMÁTICA — la app se pone al día sola al cerrarla y volverla
+ * a abrir, sin desinstalar nada:
  *
- *  1. `VERSION` se sella en cada compilación (ver el plugin de vite.config.ts).
- *     Si el contenido de la app cambió, este archivo cambia → el navegador
- *     detecta un service worker distinto byte a byte y lo instala.
- *  2. `skipWaiting()` hace que el nuevo tome el control sin esperar a que se
- *     cierren todas las pestañas. Sin esto, el service worker nuevo se queda
- *     "esperando" para siempre y la app se queda vieja hasta reinstalarla —
- *     que es justo el problema que se quería resolver.
- *  3. `clients.claim()` le pasa el control de las páginas ya abiertas.
- *  4. Eso dispara `controllerchange` en la página, y `src/lib/pwa.ts` recarga.
+ *  1. La navegación va a la RED PRIMERO. Al abrir la app se trae el index.html
+ *     fresco, que apunta a los archivos nuevos (llevan hash en el nombre), y
+ *     con eso ya está actualizada.
+ *  2. `VERSION` se sella en cada compilación (ver el plugin de vite.config.ts).
+ *     Si el contenido cambió, este archivo cambia y el navegador instala el
+ *     service worker nuevo, que al activarse borra las cachés viejas.
  *
- * Estrategia de caché:
- *  - Navegación: red primero, caché de respaldo. Con señal siempre se recibe la
- *    última versión; sin señal, la app abre igual.
- *  - Recursos (JS, CSS, fuentes, iconos): caché primero. Vite les pone un hash
- *    en el nombre, así que si el contenido cambia, cambia la URL.
+ * SIN `skipWaiting()` y SIN `clients.claim()`, a propósito. Que un service
+ * worker nuevo tome el control de una pestaña ya abierta rompe el ingreso con
+ * Firebase en iOS: interrumpe el viaje de vuelta de `signInWithRedirect` y deja
+ * al usuario dando vueltas en la pantalla de entrada. La versión nueva se queda
+ * lista y entra sola la próxima vez que se abre la app.
  *
- * Nada de Firestore se cachea aquí: de los datos se encarga la propia app.
+ * Nada de otros orígenes (Firebase, Google) se intercepta: va directo a la red.
+ * Cachear respuestas de autenticación daría sesiones fantasma.
  */
 
 const VERSION = '__BUILD_ID__'
-const SHELL = `julian-shell-${VERSION}`
-const ASSETS = `julian-assets-${VERSION}`
+const CACHE = `julian-${VERSION}`
 
 const PRECACHE = [
   '/',
@@ -38,28 +36,20 @@ const PRECACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
-      .open(SHELL)
-      // addAll falla entero si un solo recurso falla; se toleran los ausentes.
-      .then((cache) => Promise.allSettled(PRECACHE.map((url) => cache.add(url))))
-      .then(() => self.skipWaiting()),
+      .open(CACHE)
+      // allSettled y no addAll: addAll falla entero si un solo recurso falla.
+      .then((cache) => Promise.allSettled(PRECACHE.map((url) => cache.add(url)))),
   )
+  // Aquí NO va skipWaiting() — ver la nota de arriba.
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) =>
-        // Fuera las cachés de versiones anteriores, o crecerían sin límite.
-        Promise.all(keys.filter((k) => k !== SHELL && k !== ASSETS).map((k) => caches.delete(k))),
-      )
-      .then(() => self.clients.claim()),
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))),
   )
-})
-
-// Permite forzar la actualización desde la página sin esperar nada.
-self.addEventListener('message', (event) => {
-  if (event.data === 'SKIP_WAITING') self.skipWaiting()
+  // Aquí NO va clients.claim() — ver la nota de arriba.
 })
 
 self.addEventListener('fetch', (event) => {
@@ -67,41 +57,44 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return
 
   const url = new URL(request.url)
+  // Otros orígenes (Firebase, Google) van directo a la red, sin tocarlos.
+  if (url.origin !== self.location.origin) return
 
-  // Firebase y las APIs de Google: siempre a la red. Cachear respuestas de
-  // autenticación o de Firestore daría datos viejos o sesiones fantasma.
-  const isGoogleApi =
-    url.hostname.includes('firebase') ||
-    url.hostname.includes('googleapis.com') ||
-    url.hostname.includes('google.com')
-  if (isGoogleApi) return
-
-  // Navegación: red primero.
+  // Navegación: red primero. Es lo que trae la versión nueva al abrir la app.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((response) => {
           const copy = response.clone()
-          caches.open(SHELL).then((cache) => cache.put('/index.html', copy))
+          caches.open(CACHE).then((cache) => cache.put('/index.html', copy))
           return response
         })
-        .catch(() => caches.match('/index.html').then((cached) => cached ?? Response.error())),
+        .catch(() =>
+          caches
+            .match(request)
+            .then((cached) => cached ?? caches.match('/index.html'))
+            .then((cached) => cached ?? Response.error()),
+        ),
     )
     return
   }
 
-  // Recursos: caché primero.
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached
+  // Archivos propios: se sirven de la caché al instante y se refrescan detrás.
+  if (['script', 'style', 'image', 'font'].includes(request.destination)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const network = fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const copy = response.clone()
+              caches.open(CACHE).then((cache) => cache.put(request, copy))
+            }
+            return response
+          })
+          .catch(() => cached)
 
-      return fetch(request).then((response) => {
-        if (response.ok) {
-          const copy = response.clone()
-          caches.open(ASSETS).then((cache) => cache.put(request, copy))
-        }
-        return response
-      })
-    }),
-  )
+        return cached ?? network
+      }),
+    )
+  }
 })

@@ -68,7 +68,7 @@ interface AppContextValue extends DataSnapshot {
   updateReminder: (reminder: Reminder) => void
   deleteReminder: (id: ID) => void
   /** Marca un pago como hecho: avanza la fecha si es periódico, lo cierra si no. */
-  markReminderPaid: (id: ID, alsoRegister?: boolean) => void
+  markReminderPaid: (id: ID) => void
   snoozeReminder: (id: ID, days: number) => void
 
   addNote: (input: NewNoteInput) => Note
@@ -390,8 +390,6 @@ export function AppProvider({
         name: input.name.trim(),
         emoji: input.emoji || '🔔',
         amount: input.amount,
-        accountId: input.accountId,
-        categoryId: input.categoryId,
         periodic: input.periodic,
         freq: input.periodic ? (input.freq ?? 'monthly') : undefined,
         nextDate: input.nextDate,
@@ -426,44 +424,26 @@ export function AppProvider({
   )
 
   /**
-   * Confirmar un pago.
+   * Dar un pago por hecho: adelanta la fecha si es periódico, lo cierra si era
+   * de una sola vez.
    *
-   * `alsoRegister` crea además el gasto correspondiente. Es opcional a propósito:
-   * a veces Julián ya registró el gasto a mano y duplicarlo le descuadraría el mes.
+   * No crea ningún movimiento. Los recordatorios son solo eso — recordatorios —
+   * y el gasto lo registra Julián a mano, decidiendo de qué cuenta sale y en qué
+   * categoría entra. Registrarlo solo llevaba a gastos duplicados cuando ya lo
+   * había anotado por su cuenta.
    */
   const markReminderPaid = useCallback(
-    (id: ID, alsoRegister = false) => {
+    (id: ID) => {
       setSnap((s) => {
         const r = s.reminders.find((x) => x.id === id)
         if (!r) return s
-
-        let movements = s.movements
-        if (alsoRegister && r.amount && r.amount > 0 && r.accountId) {
-          const now = Date.now()
-          const movement: Movement = {
-            id: newId(),
-            type: 'expense',
-            amount: r.amount,
-            accountId: r.accountId,
-            categoryId: r.categoryId,
-            note: r.name,
-            date: now,
-            createdAt: now,
-          }
-          movements = [...movements, movement]
-          persist((p) => p.upsertMovement(movement))
-        }
 
         const next: Reminder = r.periodic
           ? { ...r, nextDate: nextReminderDate(r) }
           : { ...r, done: true, active: false }
 
         persist((p) => p.upsertReminder(next))
-        return {
-          ...s,
-          movements,
-          reminders: s.reminders.map((x) => (x.id === id ? next : x)),
-        }
+        return { ...s, reminders: s.reminders.map((x) => (x.id === id ? next : x)) }
       })
     },
     [persist],

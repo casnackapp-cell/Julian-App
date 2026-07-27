@@ -2,7 +2,6 @@
  * Ajustes. Puerta de entrada a lo que no cabe en la barra de cinco.
  */
 
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ChevronRight,
@@ -15,10 +14,8 @@ import {
   Shapes,
   Sun,
   Target,
-  TriangleAlert,
 } from 'lucide-react'
 
-import { Sheet } from '../components/ui/Sheet'
 import { useApp } from '../store/store'
 import { useAuth } from '../firebase/AuthProvider'
 import { brand } from '../config/brand'
@@ -37,9 +34,8 @@ const SECTIONS = [
 ] as const
 
 export function Settings() {
-  const { profile, updateProfile, setTheme, toggleHideBalance, resetAll } = useApp()
+  const { profile, updateProfile, setTheme, toggleHideBalance } = useApp()
   const { user, signOutUser } = useAuth()
-  const [confirmReset, setConfirmReset] = useState(false)
 
   return (
     <div className="screen">
@@ -134,47 +130,10 @@ export function Settings() {
         </section>
       )}
 
-      {/* Zona peligrosa */}
-      <div className="section-head">
-        <span className="section-head__title">Cuidado</span>
-      </div>
-
-      <button className="btn btn--danger btn--block" onClick={() => setConfirmReset(true)}>
-        <TriangleAlert size={16} />
-        Borrar todos mis datos
-      </button>
-
       <p className="small faint center" style={{ marginTop: 10 }}>
         {brand.name} · versión 1.0.0
       </p>
 
-      <Sheet
-        open={confirmReset}
-        onClose={() => setConfirmReset(false)}
-        title="¿Borrar todo?"
-        footer={
-          <>
-            <button className="btn btn--ghost" style={{ flex: 1 }} onClick={() => setConfirmReset(false)}>
-              Cancelar
-            </button>
-            <button
-              className="btn btn--danger"
-              style={{ flex: 1 }}
-              onClick={() => {
-                resetAll()
-                setConfirmReset(false)
-              }}
-            >
-              Sí, borrar todo
-            </button>
-          </>
-        }
-      >
-        <p className="empty__text" style={{ maxWidth: 'none' }}>
-          Se borran tus cuentas, movimientos, pagos, metas y notas. Las categorías vuelven a las
-          iniciales. <strong>Esto no se puede deshacer.</strong>
-        </p>
-      </Sheet>
     </div>
   )
 }

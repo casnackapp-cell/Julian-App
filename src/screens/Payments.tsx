@@ -2,21 +2,23 @@
  * Pagos del mes: calendario + lista de recordatorios.
  *
  * Resuelve el segundo problema de Julián ("se me olvidan pagos y me llegan
- * recargos"). El calendario da la foto del mes de un vistazo; la lista permite
- * confirmar cada pago.
+ * recargos"). El calendario da la foto del mes de un vistazo; la lista avisa
+ * de lo que se vence.
  *
- * Nada se registra solo. Cuando confirma un pago con monto y cuenta, la app
- * crea el gasto — y lo dice antes de hacerlo.
+ * Esto es SOLO un recordatorio: la app nunca registra un gasto por su cuenta.
+ * Al tocar "Ir a pagar" se abre el formulario de movimiento con el concepto y el
+ * monto ya puestos, y Julián decide de qué cuenta sale y en qué categoría va.
  */
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, Clock, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Plus, Trash2, Wallet } from 'lucide-react'
 
 import { Money } from '../components/Money'
 import { Sheet } from '../components/ui/Sheet'
 import { EmojiPicker } from '../components/ui/Pickers'
 import { useApp } from '../store/store'
+import { useSheets } from '../components/SheetsContext'
 import { formatAmountInput, parseAmount } from '../lib/money'
 import {
   addMonths,
@@ -30,11 +32,9 @@ import {
 } from '../lib/date'
 import {
   activeReminders,
-  categoriesOf,
   remindersByDay,
   remindersTotal,
   reminderUrgency,
-  visibleAccounts,
 } from '../data/selectors'
 import type { Reminder, ReminderFreq } from '../data/types'
 
@@ -50,7 +50,8 @@ const FREQS: Array<{ value: ReminderFreq; label: string }> = [
 
 export function Payments() {
   const navigate = useNavigate()
-  const { reminders, accounts, markReminderPaid, snoozeReminder } = useApp()
+  const { reminders, markReminderPaid, snoozeReminder } = useApp()
+  const { openMovement } = useSheets()
 
   const [offset, setOffset] = useState(0)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -63,8 +64,6 @@ export function Payments() {
   const byDay = useMemo(() => remindersByDay(reminders, from, to), [reminders, from, to])
   const monthTotal = useMemo(() => remindersTotal(reminders, from, to), [reminders, from, to])
   const upcoming = useMemo(() => activeReminders(reminders), [reminders])
-
-  const accountName = (id?: string) => accounts.find((a) => a.id === id)?.name
 
   /** Casillas del calendario, con los huecos del principio para cuadrar los días. */
   const cells = useMemo(() => {
@@ -83,6 +82,12 @@ export function Payments() {
   }, [from, to])
 
   const todayKey = dayKey()
+
+  /** Abre el formulario de movimiento con el pago ya escrito, y avanza el recordatorio. */
+  function goPay(r: Reminder) {
+    openMovement({ type: 'expense', amount: r.amount, note: r.name })
+    markReminderPaid(r.id)
+  }
 
   return (
     <div className="screen screen--plain">
@@ -197,6 +202,8 @@ export function Payments() {
         <div className="list">
           {upcoming.map((r) => {
             const urgency = reminderUrgency(r)
+            // Los botones solo salen si el pago está cerca o vencido; en los
+            // lejanos serían ruido.
             const actionable = urgency !== 'later'
 
             return (
@@ -218,7 +225,6 @@ export function Payments() {
                       {[
                         urgency === 'overdue' ? 'Vencido' : relativeDay(r.nextDate),
                         r.periodic ? FREQS.find((f) => f.value === r.freq)?.label : 'Una sola vez',
-                        accountName(r.accountId),
                       ]
                         .filter(Boolean)
                         .join(' · ')}
@@ -227,27 +233,36 @@ export function Payments() {
                   {r.amount ? <Money value={r.amount} kind="expense" /> : null}
                 </button>
 
-                {/* Los botones solo aparecen cuando el pago está cerca o vencido.
-                    En los lejanos serían ruido. */}
                 {actionable && (
-                  <div className="hstack" style={{ marginTop: 10, gap: 8 }}>
+                  <>
                     <button
-                      className="btn btn--sm btn--primary"
-                      style={{ flex: 1 }}
-                      onClick={() => markReminderPaid(r.id, Boolean(r.amount && r.accountId))}
+                      className="btn btn--sm btn--primary btn--block"
+                      style={{ marginTop: 10 }}
+                      onClick={() => goPay(r)}
                     >
-                      <Check size={15} />
-                      Ya lo pagué
+                      <Wallet size={15} />
+                      Ir a pagar
                     </button>
-                    <button
-                      className="btn btn--sm btn--ghost"
-                      style={{ flex: 1 }}
-                      onClick={() => snoozeReminder(r.id, 1)}
-                    >
-                      <Clock size={15} />
-                      Mañana
-                    </button>
-                  </div>
+
+                    <div className="hstack" style={{ marginTop: 8, gap: 8 }}>
+                      <button
+                        className="btn btn--sm btn--ghost"
+                        style={{ flex: 1 }}
+                        onClick={() => markReminderPaid(r.id)}
+                      >
+                        <Check size={15} />
+                        Ya está pagado
+                      </button>
+                      <button
+                        className="btn btn--sm btn--ghost"
+                        style={{ flex: 1 }}
+                        onClick={() => snoozeReminder(r.id, 1)}
+                      >
+                        <Clock size={15} />
+                        Mañana
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             )
@@ -269,20 +284,15 @@ function ReminderSheet({
   onClose: () => void
   editing: Reminder | null
 }) {
-  const { accounts, categories, addReminder, updateReminder, deleteReminder } = useApp()
+  const { addReminder, updateReminder, deleteReminder } = useApp()
 
   const [name, setName] = useState('')
   const [emoji, setEmoji] = useState('🔔')
   const [amountRaw, setAmountRaw] = useState('')
-  const [accountId, setAccountId] = useState('')
-  const [categoryId, setCategoryId] = useState('')
   const [periodic, setPeriodic] = useState(true)
   const [freq, setFreq] = useState<ReminderFreq>('monthly')
   const [date, setDate] = useState('')
   const [error, setError] = useState('')
-
-  const open_ = useMemo(() => visibleAccounts(accounts), [accounts])
-  const expenseCats = useMemo(() => categoriesOf(categories, 'expense'), [categories])
 
   useEffect(() => {
     if (!open) return
@@ -293,8 +303,6 @@ function ReminderSheet({
       setAmountRaw(
         editing.amount ? formatAmountInput(String(editing.amount / 100).replace('.', ',')) : '',
       )
-      setAccountId(editing.accountId ?? '')
-      setCategoryId(editing.categoryId ?? '')
       setPeriodic(editing.periodic)
       setFreq(editing.freq ?? 'monthly')
       setDate(toDateInput(editing.nextDate))
@@ -302,8 +310,6 @@ function ReminderSheet({
       setName('')
       setEmoji('🔔')
       setAmountRaw('')
-      setAccountId('')
-      setCategoryId('')
       setPeriodic(true)
       setFreq('monthly')
       setDate(toDateInput(Date.now()))
@@ -329,8 +335,6 @@ function ReminderSheet({
         name: name.trim(),
         emoji,
         amount: amount > 0 ? amount : undefined,
-        accountId: accountId || undefined,
-        categoryId: categoryId || undefined,
         periodic,
         freq: periodic ? freq : undefined,
         nextDate,
@@ -340,8 +344,6 @@ function ReminderSheet({
         name,
         emoji,
         amount: amount > 0 ? amount : undefined,
-        accountId: accountId || undefined,
-        categoryId: categoryId || undefined,
         periodic,
         freq,
         nextDate,
@@ -417,63 +419,32 @@ function ReminderSheet({
         </div>
       </div>
 
+      {/* Fichas y no un desplegable: el menú nativo del navegador se abre donde
+          quiere y rompe la pantalla. Además así se ven todas las opciones. */}
       {periodic && (
         <div className="field">
           <span className="field__label">Cada cuánto</span>
-          <select
-            className="select"
-            value={freq}
-            onChange={(e) => setFreq(e.target.value as ReminderFreq)}
-          >
+          <div className="chip-row" style={{ flexWrap: 'wrap', overflowX: 'visible' }}>
             {FREQS.map((f) => (
-              <option key={f.value} value={f.value}>
+              <button
+                key={f.value}
+                className={`chip${freq === f.value ? ' chip--active' : ''}`}
+                onClick={() => setFreq(f.value)}
+                aria-pressed={freq === f.value}
+              >
                 {f.label}
-              </option>
+              </button>
             ))}
-          </select>
-        </div>
-      )}
-
-      {open_.length > 0 && (
-        <div className="field">
-          <span className="field__label">¿De qué cuenta sale? (opcional)</span>
-          <select
-            className="select"
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-          >
-            <option value="">No registrar el gasto automáticamente</option>
-            {open_.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.emoji} {a.name}
-              </option>
-            ))}
-          </select>
-          <p className="small faint" style={{ paddingLeft: 2 }}>
-            Si eliges una cuenta y pones monto, al confirmar el pago se registra el gasto solo.
-          </p>
-        </div>
-      )}
-
-      {accountId && expenseCats.length > 0 && (
-        <div className="field">
-          <span className="field__label">Categoría del gasto</span>
-          <select
-            className="select"
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-          >
-            <option value="">Sin categoría</option>
-            {expenseCats.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.emoji} {c.name}
-              </option>
-            ))}
-          </select>
+          </div>
         </div>
       )}
 
       <EmojiPicker value={emoji} onChange={setEmoji} />
+
+      <p className="small faint" style={{ paddingLeft: 2 }}>
+        Esto es solo un recordatorio: no registra ningún gasto. Cuando toques
+        <strong> Ir a pagar</strong> se abre el formulario con el concepto y el monto ya puestos.
+      </p>
 
       {error && (
         <p className="small" style={{ color: 'var(--expense)' }} role="alert">

@@ -16,6 +16,10 @@ interface OpenOptions {
   type?: MovementType
   /** Deja preseleccionada la cuenta (por ejemplo, al venir del detalle de una). */
   accountId?: ID
+  /** Monto en centavos ya escrito, para venir desde un recordatorio de pago. */
+  amount?: number
+  /** Nota ya escrita (el nombre del pago, por ejemplo). */
+  note?: string
 }
 
 interface SheetsValue {
@@ -63,6 +67,8 @@ export function SheetsProvider({ children }: { children: ReactNode }) {
         editing={editing}
         presetType={preset.type}
         presetAccountId={preset.accountId}
+        presetAmount={preset.amount}
+        presetNote={preset.note}
       />
     </SheetsContext.Provider>
   )

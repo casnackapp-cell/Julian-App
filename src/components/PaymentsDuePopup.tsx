@@ -9,18 +9,20 @@
  */
 
 import { useEffect, useState } from 'react'
-import { BellRing, Check, Clock } from 'lucide-react'
+import { Check, Clock, Wallet } from 'lucide-react'
 
 import { Sheet } from './ui/Sheet'
 import { Money } from './Money'
 import { useApp } from '../store/store'
+import { useSheets } from './SheetsContext'
 import { dayKey, relativeDay } from '../lib/date'
 import { dueReminders, reminderUrgency } from '../data/selectors'
 
 const SEEN_KEY = 'julian.duePopup.lastSeen'
 
 export function PaymentsDuePopup() {
-  const { reminders, accounts, loading, markReminderPaid, snoozeReminder } = useApp()
+  const { reminders, loading, markReminderPaid, snoozeReminder } = useApp()
+  const { openMovement } = useSheets()
   const [open, setOpen] = useState(false)
 
   const due = dueReminders(reminders)
@@ -59,8 +61,6 @@ export function PaymentsDuePopup() {
 
   if (due.length === 0) return null
 
-  const accountName = (id?: string) => accounts.find((a) => a.id === id)?.name
-
   return (
     <Sheet
       open={open}
@@ -90,21 +90,32 @@ export function PaymentsDuePopup() {
                 </span>
                 <span className="row__main">
                   <span className="row__title">{r.name}</span>
-                  <span className="row__sub">
-                    {[badge.text, accountName(r.accountId)].filter(Boolean).join(' · ')}
-                  </span>
+                  <span className="row__sub">{badge.text}</span>
                 </span>
                 {r.amount ? <Money value={r.amount} kind="expense" /> : null}
               </div>
 
-              <div className="hstack" style={{ marginTop: 10, gap: 8 }}>
+              <button
+                className="btn btn--sm btn--primary btn--block"
+                style={{ marginTop: 10 }}
+                onClick={() => {
+                  openMovement({ type: 'expense', amount: r.amount, note: r.name })
+                  markReminderPaid(r.id)
+                  close()
+                }}
+              >
+                <Wallet size={15} />
+                Ir a pagar
+              </button>
+
+              <div className="hstack" style={{ marginTop: 8, gap: 8 }}>
                 <button
-                  className="btn btn--sm btn--primary"
+                  className="btn btn--sm btn--ghost"
                   style={{ flex: 1 }}
-                  onClick={() => markReminderPaid(r.id, Boolean(r.amount && r.accountId))}
+                  onClick={() => markReminderPaid(r.id)}
                 >
                   <Check size={15} />
-                  Ya lo pagué
+                  Ya está pagado
                 </button>
                 <button
                   className="btn btn--sm btn--ghost"
@@ -115,14 +126,6 @@ export function PaymentsDuePopup() {
                   Mañana
                 </button>
               </div>
-
-              {/* Se dice explícitamente qué va a pasar: nada de registros sorpresa. */}
-              {r.amount && r.accountId ? (
-                <p className="small faint" style={{ marginTop: 7 }}>
-                  <BellRing size={12} style={{ verticalAlign: -2, marginRight: 4 }} />
-                  Al confirmar se registra el gasto en {accountName(r.accountId)}.
-                </p>
-              ) : null}
             </div>
           )
         })}

@@ -4,20 +4,26 @@
  * El objetivo: Julián nunca tiene que desinstalar y reinstalar la app. Si se
  * publica un cambio, la próxima vez que la abra ya está actualizada.
  *
- * Cómo se consigue:
+ * Cómo funciona:
  *
- *  - Al arrancar y **cada vez que la app vuelve al frente** se le pide al
- *    navegador que compruebe si hay una versión nueva. Esto último es lo que
- *    más importa en un celular: la PWA no se cierra, se queda en segundo plano,
- *    así que sin este chequeo podría pasar días sin enterarse de nada.
- *  - Cuando el service worker nuevo toma el control, se recarga la página.
+ *  - `updateViaCache: 'none'` obliga a pedir el `sw.js` a la red y no a la caché
+ *    del navegador. Sin esto se podría quedar hasta 24 horas con el viejo.
+ *  - Se comprueba si hay versión nueva al cargar y **cada vez que la app vuelve
+ *    al frente**. Esto último es lo que más importa en un celular: la PWA no se
+ *    cierra, se queda en segundo plano, así que sin ese chequeo podría pasar
+ *    días sin enterarse.
+ *  - La navegación va a la red primero (ver `public/sw.js`), así que al abrir la
+ *    app se recibe el HTML nuevo y con él los archivos nuevos.
  *
- * La recarga solo ocurre si ya había una versión anterior corriendo. En la
- * primerísima instalación también cambia el controlador, y recargar ahí sería
- * un parpadeo sin motivo.
+ * NO se fuerza la recarga de una pestaña abierta, y el service worker tampoco
+ * usa `skipWaiting()`. Que una versión nueva tome el control a mitad de sesión
+ * rompe el ingreso con Firebase en iOS (interrumpe el regreso de
+ * `signInWithRedirect` y deja al usuario dando vueltas en la pantalla de
+ * entrada). La versión nueva entra sola al cerrar y volver a abrir, que es
+ * justo el comportamiento que se busca.
  */
 
-/** Cada cuánto se vuelve a preguntar por una versión nueva estando la app abierta. */
+/** Cada cuánto se vuelve a preguntar por una versión nueva con la app abierta. */
 const CHECK_INTERVAL = 60 * 60 * 1000 // 1 hora
 
 export function registerServiceWorker(): void {
@@ -28,17 +34,16 @@ export function registerServiceWorker(): void {
   if (!import.meta.env.PROD) return
 
   window.addEventListener('load', () => {
-    // Si ya había un controlador, cualquier cambio posterior es una actualización.
-    const hadController = Boolean(navigator.serviceWorker.controller)
-
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', { updateViaCache: 'none' })
       .then((registration) => {
         const check = () => {
           registration.update().catch(() => {
             // Sin conexión no se puede comprobar. Se reintenta a la próxima.
           })
         }
+
+        check()
 
         // Al volver al frente: es el momento en que Julián abre la app.
         document.addEventListener('visibilitychange', () => {
@@ -52,13 +57,5 @@ export function registerServiceWorker(): void {
         // funcionamiento sin conexión.
         console.warn('No se pudo registrar el service worker:', err)
       })
-
-    let reloading = false
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadController) return // primera instalación: no hay nada que recargar
-      if (reloading) return // el guardia evita el bucle de recargas
-      reloading = true
-      window.location.reload()
-    })
   })
 }
